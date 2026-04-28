@@ -1,0 +1,127 @@
+# =============================================================================
+# IDE & Editor Configuration (contains user-specific/absolute paths)
+# =============================================================================
+/.vscode/
+/.settings
+/.clangd
+*.code-workspace.local
+
+# =============================================================================
+# EIDE (Embedded IDE) files
+# =============================================================================
+/.eide/log
+/.eide.usr.ctx.json
+/.eide/
+
+# =============================================================================
+# Build Output & Intermediate Files
+# =============================================================================
+/build/
+/bin/
+/obj/
+/out/
+
+# Prerequisites
+*.d
+
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Linker output
+*.ilk
+*.map
+*.map.old
+*.exp
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+*.bin
+*.s19
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+*.dwo
+
+# =============================================================================
+# Keil MDK-ARM Specific
+# =============================================================================
+MDK-ARM/H743_FFT_Fin/
+MDK-ARM/RTE/
+MDK-ARM/*.build_log.htm
+MDK-ARM/*.htm
+MDK-ARM/*.lnp
+MDK-ARM/*.sct
+*.crf
+*.lst
+*.dbgconf.local
+*.jlink
+*.ini.bak
+*.elf.map
+
+# =============================================================================
+# CubeMX Temporary Files
+# =============================================================================
+*.ioc.bak
+*.ioc.tmp
+
+# =============================================================================
+# Temporary & Backup Files
+# =============================================================================
+*.bak
+*.BAK
+*.tmp
+*.tmp_cdt
+*.s#?
+*.swp
+*.swo
+*~
+
+# Log Files
+*.log
+*.build_log.*
+*.bld
+
+# OS Generated Files
+Thumbs.db
+.DS_Store
+.directory
+
+# Templates
+*.ept
+*.eide-template
+
+# =============================================================================
+# Other IDE & Tool Caches
+# =============================================================================
+.cache/
+.vs/
+*.psess
+*.vsp
+*.vspx
