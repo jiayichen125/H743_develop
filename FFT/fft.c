@@ -64,7 +64,7 @@ void FFT_Process(void)
     {
         adc_sum += ADC_Buffer[i];
     }
-  DC= adc_sum / 1024.0f;
+  DC= (adc_sum / 1024.0f) * 3.3f / 65536.0f;  // 换算为电压（V）
 
   //是否加窗 
    window();
@@ -84,7 +84,7 @@ void FFT_Process(void)
 	arm_cmplx_mag_f32(FFT_Input,FFT_mag,FFT_LEN);
 	
 	// Hanning窗功率补偿+归一化
-	float window_power_correction =1.5f;
+	float window_power_correction =2.0f;
 	for (uint16_t i=0;i<FFT_LEN;i++){
 			 if(i==0){
 				    FFT_mag[i]=FFT_mag[i]/FFT_LEN * window_power_correction;				 
@@ -204,7 +204,7 @@ void ADC_FFT_Get_Wave_Mes(uint32_t FFT_mag_max_index,float fs,float *FFT_Ampl,fl
       }
     f=DatePower1/DatePower2;
     Freq[0] = f*fs/FFT_LEN;
-    *FFT_Ampl = 2.0f*sqrtf(k*DatePower2);
+    *FFT_Ampl = 2.0f*sqrtf(k*DatePower2) * 3.3f / 65536.0f;  // 换算为电压（V）
 	HMI_send_float("x0.val",*FFT_Ampl);
 	HMI_send_float("x1.val",Freq[0]);
 }

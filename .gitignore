@@ -75,6 +75,7 @@
 # =============================================================================
 # 忽略 MDK-ARM 下的所有东西
 MDK-ARM/*
+*.mxproject
 # !!! 关键：强制包含启动文件 !!!
 !MDK-ARM/startup_stm32h743xx.s
 *.crf
@@ -124,3 +125,4 @@ Thumbs.db
 *.psess
 *.vsp
 *.vspx
+.mxproject
