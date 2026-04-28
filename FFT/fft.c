@@ -11,10 +11,10 @@ extern uint16_t ADC_Buffer[1024];
 uint8_t ifftFlag = 0; 
 int BaseIdx = 0; // 基波下标
 int wave_type;//波形类别 1是正弦 2是三角 3是方波
-float fs=20000.f;//采样率
+float fs=100000.0f;//采样率
 float FFT_Freq=0;  //FFT计算得到频率
 float FFT_Ampl=0;  //FFT计算得到的幅值 
-float VPP,DC=0;//峰峰值，直流偏置
+float DC=0;//直流偏置
 float FFT_mag_max={0};  //幅度谱最大值
 uint32_t FFT_mag_max_index=0;
 
@@ -35,7 +35,7 @@ void showdata(float*buffer,uint16_t n)
 {
 	for(int i=0;i<n;i++)
     {
-		printf("%d:\t%.3f\n",i,buffer[i]);
+		printf("%.3f\n",buffer[i]);
 	}
 }
 
@@ -64,7 +64,7 @@ void FFT_Process(void)
     {
         adc_sum += ADC_Buffer[i];
     }
-  DC= adc_sum / 1024.0f;
+  DC= adc_sum / 1024.0f; 
 
   //是否加窗 
    window();
@@ -76,7 +76,7 @@ void FFT_Process(void)
         FFT_Input[i * 2 + 1] = 0;                    
     }
  
-   arm_cfft_f32(&arm_cfft_sR_f32_len1024, FFT_Input, 0, 1);
+  arm_cfft_f32(&arm_cfft_sR_f32_len1024, FFT_Input, 0, 1);
 		
 	showdata(FFT_Input,FFT_LEN);
 		
@@ -84,10 +84,10 @@ void FFT_Process(void)
 	arm_cmplx_mag_f32(FFT_Input,FFT_mag,FFT_LEN);
 	
 	// Hanning窗功率补偿+归一化
-	float window_power_correction =1.5f;
+	float window_power_correction =2.0f;
 	for (uint16_t i=0;i<FFT_LEN;i++){
 			 if(i==0){
-				    FFT_mag[i]=FFT_mag[i]/FFT_LEN * window_power_correction;				 
+				  FFT_mag[i]=FFT_mag[i]/FFT_LEN * window_power_correction;				 
 				}else{
 					FFT_mag[i]=FFT_mag[i]*2.0f/FFT_LEN * window_power_correction;
 				}
@@ -95,7 +95,10 @@ void FFT_Process(void)
 	
 	Process_FFT_mag(FFT_mag,&FFT_mag_max,&FFT_mag_max_index);
 
-	ADC_FFT_Get_Wave_Mes(FFT_mag_max_index,fs,&VPP,&FFT_Freq,2);
+	ADC_FFT_Get_Wave_Mes(FFT_mag_max_index,fs,&FFT_Ampl,&FFT_Freq,2);
+
+    Find_BaseIndex();
+    wave_type_detect();
 }
 
 /*fft caculate */
@@ -205,6 +208,6 @@ void ADC_FFT_Get_Wave_Mes(uint32_t FFT_mag_max_index,float fs,float *FFT_Ampl,fl
     f=DatePower1/DatePower2;
     Freq[0] = f*fs/FFT_LEN;
     *FFT_Ampl = 2.0f*sqrtf(k*DatePower2);
-	HMI_send_float("x0.val",*FFT_Ampl);
-	HMI_send_float("x1.val",Freq[0]);
+	  HMI_send_float("x0.val",*FFT_Ampl/65536.0f*3.3f);
+	  HMI_send_float("x1.val",Freq[0]);
 }
