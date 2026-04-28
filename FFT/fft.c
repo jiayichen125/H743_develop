@@ -78,7 +78,7 @@ void FFT_Process(void)
  
   arm_cfft_f32(&arm_cfft_sR_f32_len1024, FFT_Input, 0, 1);
 		
-	showdata(FFT_Input,FFT_LEN);
+	//showdata(FFT_Input,FFT_LEN);
 		
 	//计算幅度谱
 	arm_cmplx_mag_f32(FFT_Input,FFT_mag,FFT_LEN);
@@ -175,13 +175,13 @@ void wave_type_detect(void)
     float ratio = FFT_mag[3*BaseIdx] / FFT_mag[BaseIdx]; // 计算3倍基波频率分量与基波频率分量的幅值比
     if (ratio < 0.05f) {
         wave_type = 1; // 正弦波
-		HMI_send_string("t0.txt", "正弦波");
+		HMI_send_string("t0", "正弦波");
     } else if (ratio < 0.20f) {
         wave_type = 2; // 三角波
-		HMI_send_string("t0.txt", "三角波");
+		HMI_send_string("t0", "三角波");
     } else {
         wave_type = 3; // 方波
-		HMI_send_string("t0.txt", "方波");
+		HMI_send_string("t0", "方波");
     }
 }
 
@@ -208,6 +208,6 @@ void ADC_FFT_Get_Wave_Mes(uint32_t FFT_mag_max_index,float fs,float *FFT_Ampl,fl
     f=DatePower1/DatePower2;
     Freq[0] = f*fs/FFT_LEN;
     *FFT_Ampl = 2.0f*sqrtf(k*DatePower2);
-	  HMI_send_float("x0.val",*FFT_Ampl/65536.0f*3.3f);
-	  HMI_send_float("x1.val",Freq[0]);
+	HMI_send_float("x0",*FFT_Ampl/65536.0f*3.3f);
+	HMI_send_float("x1",Freq[0]);
 }
