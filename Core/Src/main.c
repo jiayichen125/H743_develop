@@ -114,10 +114,9 @@ int main(void)
 		  ADC_Flag=0;
 		  for (uint16_t i=0;i<ADC_SIZE;i++){
 			  ADC_float[i]=(float)ADC_Buffer[i]/65536.0f*3.3f;
-				HMI_Wave("s0.id", 0, ADC_float[i]*50);
+				//HMI_Wave("s0.id", 0, ADC_float[i]*50);
 			  //printf("%.3f\n",ADC_float[i]);
 		  }
-			window();
 			FFT_Process();	
 			HAL_ADC_Start_DMA(&hadc1,(uint32_t*)ADC_Buffer,ADC_SIZE);
 		}

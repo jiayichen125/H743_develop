@@ -14,9 +14,10 @@ int wave_type;//波形类别 1是正弦 2是三角 3是方波
 float fs=20000.f;//采样率
 float FFT_Freq=0;  //FFT计算得到频率
 float FFT_Ampl=0;  //FFT计算得到的幅值 
-float VPP,Ud=0;//峰峰值，直流偏置
+float VPP,DC=0;//峰峰值，直流偏置
 float FFT_mag_max={0};  //幅度谱最大值
 uint32_t FFT_mag_max_index=0;
+
 
 /* 输入和输出缓冲 */
 
@@ -57,15 +58,27 @@ void FFT_Process(void)
 	memset (FFT_mag,0,sizeof(FFT_mag));
 	memset (FFT_Output,0,sizeof(FFT_Output));
 	
-	for(int i=0;i<1024;i++)
+  // 计算ADC数据的平均值（DC偏置）
+  uint32_t adc_sum = 0;
+  for(int i = 0; i < 1024; i++)
     {
-      FFT_Input[i * 2] = ADC_Buffer[i] * Window_OutputBuffer[i];
-      FFT_Input[i * 2 + 1] = 0;                    
+        adc_sum += ADC_Buffer[i];
     }
+  DC= adc_sum / 1024.0f;
+
+  //是否加窗 
+   window();
+
+  // 消除DC偏置后再转浮点和加窗
+  for(int i = 0; i < 1024; i++)
+    {
+        FFT_Input[i * 2] = ((float)ADC_Buffer[i] - DC) * Window_OutputBuffer[i];
+        FFT_Input[i * 2 + 1] = 0;                    
+    }
+ 
+   arm_cfft_f32(&arm_cfft_sR_f32_len1024, FFT_Input, 0, 1);
 		
-    arm_cfft_f32(&arm_cfft_sR_f32_len1024, FFT_Input, 0, 1);
-		
-	//showdata(FFT_Input,FFT_LEN);
+	showdata(FFT_Input,FFT_LEN);
 		
 	//计算幅度谱
 	arm_cmplx_mag_f32(FFT_Input,FFT_mag,FFT_LEN);
@@ -82,7 +95,7 @@ void FFT_Process(void)
 	
 	Process_FFT_mag(FFT_mag,&FFT_mag_max,&FFT_mag_max_index);
 
-	//ADC_FFT_Get_Wave_Mes(FFT_mag_max_index,fs,&VPP,&FFT_Freq,2);
+	ADC_FFT_Get_Wave_Mes(FFT_mag_max_index,fs,&VPP,&FFT_Freq,2);
 }
 
 /*fft caculate */
@@ -97,10 +110,7 @@ void Process_FFT_mag(float *FFT_mag,float *FFT_mag_max,uint32_t *FFT_mag_max_ind
 	FFT_Freq=(float)(*FFT_mag_max_index)*fs/(float)FFT_LEN;
 	
 	//求幅值：最大值结果索引*2/FFT长度 前面已经进行过归一处理了，所以这里不需要再除以FFT_LEN了/*2
-	FFT_Ampl=*FFT_mag_max;//幅度
-	
-	//求直流偏置
-	Ud=FFT_mag[0];
+	FFT_Ampl=*FFT_mag_max;
 
 }
 
@@ -176,13 +186,13 @@ void wave_type_detect(void)
 
 FFT_mag_max_index				FFT结果中峰值的位置
 fs				采样频率
-VPP[0]			矫正后的幅值
+FFT_Ampl	    矫正后的幅值
 Freq[0]			矫正后的频率
 correctNum		矫正的点数，一般取2即可，确保峰值左右的correctNum内没有其他信号
 FFT_mag		FFT结果的幅值数组	
 */
 
-void ADC_FFT_Get_Wave_Mes(uint32_t FFT_mag_max_index,float fs,float *VPP,float *Freq,int correctNum)
+void ADC_FFT_Get_Wave_Mes(uint32_t FFT_mag_max_index,float fs,float *FFT_Ampl,float *Freq,int correctNum)
 {
     int i;
     float k=2.667;                                     
@@ -192,9 +202,9 @@ void ADC_FFT_Get_Wave_Mes(uint32_t FFT_mag_max_index,float fs,float *VPP,float *
           DatePower1+=(FFT_mag_max_index+i)*FFT_mag[FFT_mag_max_index+i]*FFT_mag[FFT_mag_max_index+i];
           DatePower2+=FFT_mag[FFT_mag_max_index+i]*FFT_mag[FFT_mag_max_index+i];
       }
-      f=DatePower1/DatePower2;
-      Freq[0] = f*fs/FFT_LEN;
-      VPP[0] = 2.0f*sqrtf(k*DatePower2);
-	  HMI_send_float("x0.val",VPP[0]);
-	  HMI_send_float("x1.val",Freq[0]);
+    f=DatePower1/DatePower2;
+    Freq[0] = f*fs/FFT_LEN;
+    *FFT_Ampl = 2.0f*sqrtf(k*DatePower2);
+	HMI_send_float("x0.val",*FFT_Ampl);
+	HMI_send_float("x1.val",Freq[0]);
 }
