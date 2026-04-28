@@ -63,7 +63,7 @@ void FFT_Process(void)
       FFT_Input[i * 2 + 1] = 0;                    
     }
 		
-  arm_cfft_f32(&arm_cfft_sR_f32_len1024, FFT_Input, 0, 1);
+    arm_cfft_f32(&arm_cfft_sR_f32_len1024, FFT_Input, 0, 1);
 		
 	//showdata(FFT_Input,FFT_LEN);
 		
@@ -74,39 +74,33 @@ void FFT_Process(void)
 	float window_power_correction =1.5f;
 	for (uint16_t i=0;i<FFT_LEN;i++){
 			 if(i==0){
-				  FFT_mag[i]=FFT_mag[i]/FFT_LEN * window_power_correction;				 
+				    FFT_mag[i]=FFT_mag[i]/FFT_LEN * window_power_correction;				 
 				}else{
 					FFT_mag[i]=FFT_mag[i]*2.0f/FFT_LEN * window_power_correction;
 				}
 	}
 	
-  for	(uint16_t i=0;i<FFT_LEN;i++){
-       FFT_Output[i]=sqrt(FFT_mag[i]);
-	}		
-	
-  //改
-	Process_FFT_mag(FFT_mag,FFT_mag_max,FFT_mag_max_index);
+	Process_FFT_mag(FFT_mag,&FFT_mag_max,&FFT_mag_max_index);
 
 	//ADC_FFT_Get_Wave_Mes(FFT_mag_max_index,fs,&VPP,&FFT_Freq,2);
-   
 }
 
 /*fft caculate */
 //从频谱中提取信号，找到主频，计算信号频率和幅度。
-void Process_FFT_mag(float *FFT_mag,float FFT_mag_max,uint32_t FFT_mag_max_index)
+void Process_FFT_mag(float *FFT_mag,float *FFT_mag_max,uint32_t *FFT_mag_max_index)
 {
 
 	//找幅度谱前一半数据，找到最大值和索引
-	arm_max_f32(FFT_mag,FFT_LEN/2,&FFT_mag_max,&FFT_mag_max_index);
+	arm_max_f32(FFT_mag,FFT_LEN/2,FFT_mag_max,FFT_mag_max_index);
 	
 	//求频率：最大值结果*采样率/FFT长度
-	FFT_Freq=(float)FFT_mag_max_index*fs/(float)FFT_LEN;
+	FFT_Freq=(float)(*FFT_mag_max_index)*fs/(float)FFT_LEN;
 	
-	//求幅值：最大值结果索引*2/FFT长度
-	FFT_Ampl=FFT_mag_max*2.0f/(float)FFT_LEN;//幅度
+	//求幅值：最大值结果索引*2/FFT长度 前面已经进行过归一处理了，所以这里不需要再除以FFT_LEN了/*2
+	FFT_Ampl=*FFT_mag_max;//幅度
 	
 	//求直流偏置
-	Ud=FFT_mag[0]/(float)FFT_LEN;
+	Ud=FFT_mag[0];
 
 }
 
@@ -152,41 +146,55 @@ void Find_BaseIndex(void)
     BaseIdx = 0;
     float max_val = 0;
     for (int i = 2; i < FFT_LEN / 2; i++) { // 遍历 0 ~ Fs/2 部分
-        if (FFT_Output[i] > max_val) {
-            max_val = FFT_Output[i];
+        if (FFT_mag[i] > max_val) {
+            max_val = FFT_mag[i];
             BaseIdx = i; // 记录基波的索引
         }
     }
 }
 
 /*波形判断*/
-void Wave_Type(void){
-	
+void wave_type_detect(void)
+{
+    // 越界保护：若3次谐波下标超出前半段频谱，无法判断，默认正弦波
+    // if (3 * BaseIdx >= FFT_LEN / 2) { wave_type = 1; return; }
+
+    float ratio = FFT_mag[3*BaseIdx] / FFT_mag[BaseIdx]; // 计算3倍基波频率分量与基波频率分量的幅值比
+    if (ratio < 0.05f) {
+        wave_type = 1; // 正弦波
+		HMI_send_string("t0.txt", "正弦波");
+    } else if (ratio < 0.20f) {
+        wave_type = 2; // 三角波
+		HMI_send_string("t0.txt", "三角波");
+    } else {
+        wave_type = 3; // 方波
+		HMI_send_string("t0.txt", "方波");
+    }
 }
 
 /*输入参数为FFT计算后的结果，输出矫正后的频率和幅度
 
-Row				FFT结果中峰值的位置
+FFT_mag_max_index				FFT结果中峰值的位置
 fs				采样频率
 VPP[0]			矫正后的幅值
 Freq[0]			矫正后的频率
 correctNum		矫正的点数，一般取2即可，确保峰值左右的correctNum内没有其他信号
-FFT_Output		FFT结果的幅值数组	
+FFT_mag		FFT结果的幅值数组	
 */
 
-void ADC_FFT_Get_Wave_Mes(uint32_t Row,float fs,float *VPP,float *Freq,int correctNum)
+void ADC_FFT_Get_Wave_Mes(uint32_t FFT_mag_max_index,float fs,float *VPP,float *Freq,int correctNum)
 {
     int i;
     float k=2.667;                                     
     float DatePower1=0,DatePower2=0,f;
     for(i=-correctNum;i<=correctNum;i++)     
       {
-          DatePower1+=(Row+i)*FFT_Output[Row+i]*FFT_Output[Row+i];
-          DatePower2+=FFT_Output[Row+i]*FFT_Output[Row+i];
+          DatePower1+=(FFT_mag_max_index+i)*FFT_mag[FFT_mag_max_index+i]*FFT_mag[FFT_mag_max_index+i];
+          DatePower2+=FFT_mag[FFT_mag_max_index+i]*FFT_mag[FFT_mag_max_index+i];
       }
       f=DatePower1/DatePower2;
       Freq[0] = f*fs/FFT_LEN;
       VPP[0] = 2.0f*sqrtf(k*DatePower2);
-			HMI_send_float("x0.val",VPP[0]);
-			HMI_send_float("x1.val",Freq[0]);
+	  HMI_send_float("x0.val",VPP[0]);
+	  HMI_send_float("x1.val",Freq[0]);
 }

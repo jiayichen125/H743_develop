@@ -60,6 +60,13 @@ virtualFolder:
         - name: CMSIS
           files:
             - path: Core/Src/system_stm32h7xx.c
+            - path: Drivers/CMSIS/DSP/Source/CommonTables/arm_common_tables.c
+            - path: Drivers/CMSIS/DSP/Source/CommonTables/arm_const_structs.c
+            - path: Drivers/CMSIS/DSP/Source/TransformFunctions/arm_cfft_f32.c
+            - path: Drivers/CMSIS/DSP/Source/ComplexMathFunctions/arm_cmplx_mag_f32.c
+            - path: Drivers/CMSIS/DSP/Source/StatisticsFunctions/arm_max_f32.c
+            - path: Drivers/CMSIS/DSP/Source/TransformFunctions/arm_bitreversal2.c
+            - path: Drivers/CMSIS/DSP/Source/TransformFunctions/arm_cfft_radix8_f32.c
           folders: []
     - name: FFT
       files:
