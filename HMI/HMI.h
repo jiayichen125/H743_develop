@@ -2,14 +2,14 @@
 #define __HMI_H__
  
 #include "stm32h7xx_hal.h"
-#include <stdint.h>  // Ìí¼ÓÕâ¸ö£¬ÓÃÓÚ uint8_t ÀàĞÍ
+#include <stdint.h>  // æ·»åŠ è¿™ä¸ªï¼Œç”¨äº uint8_t ç±»å‹
  
 void HMI_send_string(char* name, char* showdata);
 void HMI_send_number(char* name, int num);
 void HMI_send_float(char* name, float num);
 void HMI_Wave(char* name, int ch, int val);
-void HMI_Wave_Fast(char* name, int ch, int count, uint8_t* show_data);  // ¸ÄÎª uint8_t*
+void HMI_Wave_Fast(char* name, int ch, int count, uint8_t* show_data);  // æ”¹ä¸º uint8_t*
 void HMI_Wave_Clear(char* name, int ch);
-void HMI_set_property(char* obj_name, char* property, int value);  // ĞÂÔö
+void HMI_set_property(char* obj_name, char* property, int value);  // æ–°å¢
  
 #endif
