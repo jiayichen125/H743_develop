@@ -1,67 +1,67 @@
 #include "HMI.h"
 #include "usart.h"
 
-// ·¢ËÍ×Ö·û´®£¨ÓÃÓÚÎÄ±¾ÏÔÊ¾£©
+// å‘é€å­—ç¬¦ä¸²ï¼ˆç”¨äºæ–‡æœ¬æ˜¾ç¤ºï¼‰
 void HMI_send_string(char* obj_name, char* showdata)
 {
-    // ¸ñÊ½: obj_name.txt="content" + 0xFF 0xFF 0xFF
+    // æ ¼å¼: obj_name.txt="content" + 0xFF 0xFF 0xFF
     printf("%s.txt=\"%s\"\xff\xff\xff", obj_name, showdata);
 }
 
-// ·¢ËÍÕûÊı
+// å‘é€æ•´æ•°
 void HMI_send_number(char* obj_name, int num)
 {
-    // ¸ñÊ½: obj_name.val=num + 0xFF 0xFF 0xFF
+    // æ ¼å¼: obj_name.val=num + 0xFF 0xFF 0xFF
     printf("%s.val=%d\xff\xff\xff", obj_name, num);
 }
 
-// ·¢ËÍ¸¡µãÊı£¨×ª»»ÎªÕûÊı»òÌØ¶¨¾«¶È£©
+// å‘é€æµ®ç‚¹æ•°ï¼ˆè½¬æ¢ä¸ºæ•´æ•°æˆ–ç‰¹å®šç²¾åº¦ï¼‰
 void HMI_send_float(char* obj_name, float num)
 {
-    // ¸ñÊ½: obj_name.val=num (³ËÒÔ1000±£Áô3Î»Ğ¡Êı) + 0xFF 0xFF 0xFF
+    // æ ¼å¼: obj_name.val=num (ä¹˜ä»¥1000ä¿ç•™3ä½å°æ•°) + 0xFF 0xFF 0xFF
     printf("%s.val=%d\xff\xff\xff", obj_name, (int)(num * 1000));
 }
 
-// Ìí¼Ó²¨ĞÎÊı¾İµã£¨µ¥¸öµã£©
+// æ·»åŠ æ³¢å½¢æ•°æ®ç‚¹ï¼ˆå•ä¸ªç‚¹ï¼‰
 void HMI_Wave(char* wf_name, int ch, int val)
 {
-    // ¸ñÊ½: add wf_name,ch,val + 0xFF 0xFF 0xFF
+    // æ ¼å¼: add wf_name,ch,val + 0xFF 0xFF 0xFF
     printf("add %s,%d,%d\xff\xff\xff", wf_name, ch, val);
 }
 
-// ¿ìËÙ²¨ĞÎÏÔÊ¾£¨Á¬ĞøÊı¾İ£©
+// å¿«é€Ÿæ³¢å½¢æ˜¾ç¤ºï¼ˆè¿ç»­æ•°æ®ï¼‰
 void HMI_Wave_Fast(char* wf_name, int ch, int count, uint8_t* show_data)
 {
     int i;
     
-    // µÚÒ»²½£º·¢ËÍÃüÁîÍ·
+    // ç¬¬ä¸€æ­¥ï¼šå‘é€å‘½ä»¤å¤´
     printf("addt %s,%d,%d\xff\xff\xff", wf_name, ch, count);
     
-    // µÚ¶ş²½£ºÑÓ³ÙµÈ´ıÆÁÄ»×¼±¸
+    // ç¬¬äºŒæ­¥ï¼šå»¶è¿Ÿç­‰å¾…å±å¹•å‡†å¤‡
     HAL_Delay(10);
     
-    // µÚÈı²½£º·¢ËÍ²¨ĞÎÊı¾İ£¨×Ö½ÚÁ÷£©
+    // ç¬¬ä¸‰æ­¥ï¼šå‘é€æ³¢å½¢æ•°æ®ï¼ˆå­—èŠ‚æµï¼‰
     for (i = 0; i < count; i++) {
-        // Ö±½Ó·¢ËÍ×Ö½Ú£¬²»ĞèÒª×ª»»
+        // ç›´æ¥å‘é€å­—èŠ‚ï¼Œä¸éœ€è¦è½¬æ¢
         printf("%c", show_data[i]);
     }
     
-    // µÚËÄ²½£º·¢ËÍ½áÊø·û
+    // ç¬¬å››æ­¥ï¼šå‘é€ç»“æŸç¬¦
     printf("\xff\xff\xff");
     
-    HAL_Delay(10);  // µÈ´ıÆÁÄ»´¦Àí
+    HAL_Delay(10);  // ç­‰å¾…å±å¹•å¤„ç†
 }
 
-// Çå¿Õ²¨ĞÎ
+// æ¸…ç©ºæ³¢å½¢
 void HMI_Wave_Clear(char* wf_name, int ch)
 {
-    // ¸ñÊ½: cle wf_name,ch + 0xFF 0xFF 0xFF
+    // æ ¼å¼: cle wf_name,ch + 0xFF 0xFF 0xFF
     printf("cle %s,%d\xff\xff\xff", wf_name, ch);
 }
 
-// ¶îÍâ¹¦ÄÜ£ºÉèÖÃ×é¼şÊôĞÔ
+// é¢å¤–åŠŸèƒ½ï¼šè®¾ç½®ç»„ä»¶å±æ€§
 void HMI_set_property(char* obj_name, char* property, int value)
 {
-    // ¸ñÊ½: obj_name.property=value + 0xFF 0xFF 0xFF
+    // æ ¼å¼: obj_name.property=value + 0xFF 0xFF 0xFF
     printf("%s.%s=%d\xff\xff\xff", obj_name, property, value);
 }

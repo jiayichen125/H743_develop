@@ -2,7 +2,7 @@
 #include "HMI.h"
 
 extern uint16_t ADC_Buffer[1024];
-extern TIM_HandleTypeDef htim3;  /* ���ڶ�̬�л������� */
+extern TIM_HandleTypeDef htim3;  /* 用于动态切换采样率 */
 
 /* 变量 */
 #define FFT_LEN 1024
@@ -30,13 +30,13 @@ uint8_t EnableWindow = 1;           // 是否加窗
 float Window_OutputBuffer[ADC_LEN]; // 窗函数输出缓冲
 
 /* ---------------------------------------------------------------
- * ����Ӧ������
- * ��λ��20kHz / 200kHz / 2MHz
- * �����ͣ���20%����ֹ�߽�Ƶ�ʷ�������
+ * 自适应采样率
+ * 档位：20kHz / 200kHz / 2MHz
+ * 带迟滞（±20%）防止边界频率反复跳档
  * --------------------------------------------------------------- */
 static float select_fs(float freq)
 {
-    static float cur = 100000.0f;  /* �� MX_TIM3_Init ARR=199 ��Ӧ */
+    static float cur = 100000.0f;  /* 与 MX_TIM3_Init ARR=199 对应 */
     if      (cur ==   20000.0f && freq >   1200.0f) cur =  200000.0f;
     else if (cur ==  200000.0f && freq <    800.0f) cur =   20000.0f;
     else if (cur ==  200000.0f && freq >  12000.0f) cur = 2000000.0f;
@@ -44,8 +44,8 @@ static float select_fs(float freq)
     return cur;
 }
 
-/* ֱ���޸� TIM3->ARR����ͣ��ʱ������һ֡ DMA ����Ч
- * ע�⣺2MHz ����ARR=9��Ҫ�� ADC ��ת��ʱ�� < 500ns����ȷ�� ADC �ں�ʱ�� */
+/* 直接修改 TIM3->ARR，不停定时器，下一帧 DMA 即生效
+ * 注意：2MHz 档（ARR=9）要求 ADC 总转换时间 < 500ns，请确认 ADC 内核时钟 */
 static void apply_fs(float new_fs)
 {
     uint32_t arr = (uint32_t)((float)TIM3_CLK_HZ / new_fs + 0.5f) - 1;
@@ -126,7 +126,7 @@ void FFT_Process(void)
     Find_BaseIndex();
     wave_type_detect();
 
-    /* ���ݱ�֡Ƶ��Ϊ��һ֡ѡ����Ѳ����ʣ�> 50Hz �����β�������� */
+    /* 根据本帧频率为下一帧选择最佳采样率（> 50Hz 才信任测量结果） */
     if (FFT_Freq > 50.0f)
     {
         float new_fs = select_fs(FFT_Freq);
