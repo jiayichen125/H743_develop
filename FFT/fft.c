@@ -4,31 +4,31 @@
 extern uint16_t ADC_Buffer[1024];
 
 
-/* ±äÁ¿ */
+/* å˜é‡ */
 #define FFT_LEN 1024
 #define ADC_LEN 1024
 
 uint8_t ifftFlag = 0; 
-int BaseIdx = 0; // »ù²¨ÏÂ±ê
-int wave_type;//²¨ĞÎÀà±ğ 1ÊÇÕıÏÒ 2ÊÇÈı½Ç 3ÊÇ·½²¨
-float fs=100000.0f;//²ÉÑùÂÊ
-float FFT_Freq=0;  //FFT¼ÆËãµÃµ½ÆµÂÊ
-float FFT_Ampl=0;  //FFT¼ÆËãµÃµ½µÄ·ùÖµ 
-float DC=0;//Ö±Á÷Æ«ÖÃ
-float FFT_mag_max={0};  //·ù¶ÈÆ××î´óÖµ
+int BaseIdx = 0; // åŸºæ³¢ä¸‹æ ‡
+int wave_type;//æ³¢å½¢ç±»åˆ« 1æ˜¯æ­£å¼¦ 2æ˜¯ä¸‰è§’ 3æ˜¯æ–¹æ³¢
+float fs=100000.0f;//é‡‡æ ·ç‡
+float FFT_Freq=0;  //FFTè®¡ç®—å¾—åˆ°é¢‘ç‡
+float FFT_Ampl=0;  //FFTè®¡ç®—å¾—åˆ°çš„å¹…å€¼ 
+float DC=0;//ç›´æµåç½®
+float FFT_mag_max={0};  //å¹…åº¦è°±æœ€å¤§å€¼
 uint32_t FFT_mag_max_index=0;
 
 
-/* ÊäÈëºÍÊä³ö»º³å */
+/* è¾“å…¥å’Œè¾“å‡ºç¼“å†² */
 
 float FFT_Output[FFT_LEN]; 
 float FFT_Input[FFT_LEN*2]; 
-float FFT_mag[FFT_LEN];//·ù¶ÈÆ×
+float FFT_mag[FFT_LEN];//å¹…åº¦è°±
 float IFFT_Output[FFT_LEN];
 
 
-uint8_t EnableWindow=1; // ÊÇ·ñ¼Ó´°
-float Window_OutputBuffer[ADC_LEN]; // ´°º¯ÊıÊä³ö»º³å
+uint8_t EnableWindow=1; // æ˜¯å¦åŠ çª—
+float Window_OutputBuffer[ADC_LEN]; // çª—å‡½æ•°è¾“å‡ºç¼“å†²
 
 
 void showdata(float*buffer,uint16_t n)
@@ -53,12 +53,12 @@ void FFT_Process(void)
 	arm_rfft_fast_f32(&S, FFT_Input, FFT_Output, ifftFlag);
 	*/
 	
-	//ÇåÁã»º³åÇø
+	//æ¸…é›¶ç¼“å†²åŒº
 	memset (FFT_Input,0,sizeof(FFT_Input));
 	memset (FFT_mag,0,sizeof(FFT_mag));
 	memset (FFT_Output,0,sizeof(FFT_Output));
 	
-  // ¼ÆËãADCÊı¾İµÄÆ½¾ùÖµ£¨DCÆ«ÖÃ£©
+  // è®¡ç®—ADCæ•°æ®çš„å¹³å‡å€¼ï¼ˆDCåç½®ï¼‰
   uint32_t adc_sum = 0;
   for(int i = 0; i < 1024; i++)
     {
@@ -66,10 +66,10 @@ void FFT_Process(void)
     }
   DC= adc_sum / 1024.0f; 
 
-  //ÊÇ·ñ¼Ó´° 
+  //æ˜¯å¦åŠ çª— 
    window();
 
-  // Ïû³ıDCÆ«ÖÃºóÔÙ×ª¸¡µãºÍ¼Ó´°
+  // æ¶ˆé™¤DCåç½®åå†è½¬æµ®ç‚¹å’ŒåŠ çª—
   for(int i = 0; i < 1024; i++)
     {
         FFT_Input[i * 2] = ((float)ADC_Buffer[i] - DC) * Window_OutputBuffer[i];
@@ -80,10 +80,10 @@ void FFT_Process(void)
 		
 	//showdata(FFT_Input,FFT_LEN);
 		
-	//¼ÆËã·ù¶ÈÆ×
+	//è®¡ç®—å¹…åº¦è°±
 	arm_cmplx_mag_f32(FFT_Input,FFT_mag,FFT_LEN);
 	
-	// Hanning´°¹¦ÂÊ²¹³¥+¹éÒ»»¯
+	// Hanningçª—åŠŸç‡è¡¥å¿+å½’ä¸€åŒ–
 	float window_power_correction =2.0f;
 	for (uint16_t i=0;i<FFT_LEN;i++){
 			 if(i==0){
@@ -102,17 +102,17 @@ void FFT_Process(void)
 }
 
 /*fft caculate */
-//´ÓÆµÆ×ÖĞÌáÈ¡ĞÅºÅ£¬ÕÒµ½Ö÷Æµ£¬¼ÆËãĞÅºÅÆµÂÊºÍ·ù¶È¡£
+//ä»é¢‘è°±ä¸­æå–ä¿¡å·ï¼Œæ‰¾åˆ°ä¸»é¢‘ï¼Œè®¡ç®—ä¿¡å·é¢‘ç‡å’Œå¹…åº¦ã€‚
 void Process_FFT_mag(float *FFT_mag,float *FFT_mag_max,uint32_t *FFT_mag_max_index)
 {
 
-	//ÕÒ·ù¶ÈÆ×Ç°Ò»°ëÊı¾İ£¬ÕÒµ½×î´óÖµºÍË÷Òı
+	//æ‰¾å¹…åº¦è°±å‰ä¸€åŠæ•°æ®ï¼Œæ‰¾åˆ°æœ€å¤§å€¼å’Œç´¢å¼•
 	arm_max_f32(FFT_mag,FFT_LEN/2,FFT_mag_max,FFT_mag_max_index);
 	
-	//ÇóÆµÂÊ£º×î´óÖµ½á¹û*²ÉÑùÂÊ/FFT³¤¶È
+	//æ±‚é¢‘ç‡ï¼šæœ€å¤§å€¼ç»“æœ*é‡‡æ ·ç‡/FFTé•¿åº¦
 	FFT_Freq=(float)(*FFT_mag_max_index)*fs/(float)FFT_LEN;
 	
-	//Çó·ùÖµ£º×î´óÖµ½á¹ûË÷Òı*2/FFT³¤¶È Ç°ÃæÒÑ¾­½øĞĞ¹ı¹éÒ»´¦ÀíÁË£¬ËùÒÔÕâÀï²»ĞèÒªÔÙ³ıÒÔFFT_LENÁË/*2
+	//æ±‚å¹…å€¼ï¼šæœ€å¤§å€¼ç»“æœç´¢å¼•*2/FFTé•¿åº¦ å‰é¢å·²ç»è¿›è¡Œè¿‡å½’ä¸€å¤„ç†äº†ï¼Œæ‰€ä»¥è¿™é‡Œä¸éœ€è¦å†é™¤ä»¥FFT_LENäº†/*2
 	FFT_Ampl=*FFT_mag_max;
 
 }
@@ -128,14 +128,14 @@ void IFFT_Process(void)
 	*/
     arm_cfft_f32(&arm_cfft_sR_f32_len1024, FFT_Input, 1, 1);
 
-    // ÌáÈ¡Êµ²¿×÷Îª IFFT Êä³ö
+    // æå–å®éƒ¨ä½œä¸º IFFT è¾“å‡º
     for (int i = 0; i < FFT_LEN; i++) {
-        IFFT_Output[i] = FFT_Input[2*i];  // È¡Êµ²¿
+        IFFT_Output[i] = FFT_Input[2*i];  // å–å®éƒ¨
     }
 }
 
 
-/*Hanning´°*/
+/*Hanningçª—*/
 void window(void)
 {
     for (int i = 0; i < ADC_LEN; i++)
@@ -147,58 +147,124 @@ void window(void)
         }
         else
         {
-            Window_OutputBuffer[i] = 1.0f;                       // ²»¼Ó´°
+            Window_OutputBuffer[i] = 1.0f;                       // ä¸åŠ çª—
         }
     }
 }
 
 
-/* ÕÒµ½»ù²¨µÄÏÂ±ê*/
+/* æ‰¾åˆ°åŸºæ³¢çš„ä¸‹æ ‡*/
 void Find_BaseIndex(void)
 {
     BaseIdx = 0;
     float max_val = 0;
-    for (int i = 2; i < FFT_LEN / 2; i++) { // ±éÀú 0 ~ Fs/2 ²¿·Ö
+    for (int i = 2; i < FFT_LEN / 2; i++) { // éå† 0 ~ Fs/2 éƒ¨åˆ†
         if (FFT_mag[i] > max_val) {
             max_val = FFT_mag[i];
-            BaseIdx = i; // ¼ÇÂ¼»ù²¨µÄË÷Òı
+            BaseIdx = i; // è®°å½•åŸºæ³¢çš„ç´¢å¼•
         }
     }
 }
 
-/*²¨ĞÎÅĞ¶Ï*/
+/* æ—¶åŸŸç»Ÿè®¡åˆ†ç±»
+ * è¿”å›å€¼ï¼š1=æ­£å¼¦æ³¢  2=ä¸‰è§’æ³¢  3=æ–¹æ³¢  0=æœªçŸ¥ï¼ˆä¿¡å·è¿‡å¼±ï¼‰
+ */
+static int ClassifyWaveform(void)
+{
+    float    sum_abs = 0.0f, sum_sq = 0.0f;
+    uint32_t peak_count = 0;
+    uint16_t max_v = 0, min_v = 65535;
+
+    /* ä¸€æ¬¡éå†æ±‚æå€¼ */
+    for(uint32_t i = 0; i < ADC_LEN; i++) {
+        if(ADC_Buffer[i] > max_v) max_v = ADC_Buffer[i];
+        if(ADC_Buffer[i] < min_v) min_v = ADC_Buffer[i];
+    }
+
+    float vpp = (float)(max_v - min_v);
+    if(vpp < 655.0f) return 0; /* ä¿¡å·è¿‡å¼±ï¼ˆ< ~0.033Vï¼‰ï¼Œè¿”å› UNKNOWN */
+
+    float offset    = (float)min_v + vpp * 0.5f;
+    float threshold = vpp * 0.10f; /* å³°å€¼åŒºé—´ï¼švpp ä¸Šä¸‹ 10% */
+
+    /* äºŒæ¬¡éå†ç»Ÿè®¡ Kf ä¸ Rpeak */
+    for(uint32_t i = 0; i < ADC_LEN; i++) {
+        float val = (float)ADC_Buffer[i] - offset;
+        sum_abs += fabsf(val);
+        sum_sq  += val * val;
+        if((float)ADC_Buffer[i] >= (float)max_v - threshold ||
+           (float)ADC_Buffer[i] <= (float)min_v + threshold) {
+            peak_count++;
+        }
+    }
+
+    float v_rms  = sqrtf(sum_sq / (float)ADC_LEN);
+    float v_avg  = sum_abs / (float)ADC_LEN;
+    if(v_avg < 1e-6f) return 0;
+
+    float k_f    = v_rms / v_avg;                       /* æ³¢å½¢å› å­ */
+    float r_peak = (float)peak_count / (float)ADC_LEN;  /* å³°å€¼å æ¯” */
+
+    if(r_peak > 0.80f && k_f < 1.05f) return 3; /* æ–¹æ³¢ï¼šç»å¤§å¤šæ•°ç‚¹åœ¨ä¸¤ç«¯ï¼ŒKfâ‰ˆ1 */
+    if(r_peak < 0.25f && k_f > 1.13f) return 2; /* ä¸‰è§’æ³¢ï¼šå³°å€¼åœç•™æçŸ­ï¼ŒKfå¤§ */
+    return 1;                                    /* æ­£å¼¦æ³¢ï¼ˆé»˜è®¤ï¼‰ */
+}
+
+/*æ³¢å½¢åˆ¤æ–­ï¼ˆFFTè°æ³¢æ³• + æ—¶åŸŸç»Ÿè®¡æ³•è”åˆåˆ¤å†³ï¼‰*/
 void wave_type_detect(void)
 {
-    // Ô½½ç±£»¤£ºÈô3´ÎĞ³²¨ÏÂ±ê³¬³öÇ°°ë¶ÎÆµÆ×£¬ÎŞ·¨ÅĞ¶Ï£¬Ä¬ÈÏÕıÏÒ²¨
-    // if (3 * BaseIdx >= FFT_LEN / 2) { wave_type = 1; return; }
+    int stat_type = 0, fft_type = 0;
 
-    float ratio = FFT_mag[3*BaseIdx] / FFT_mag[BaseIdx]; // ¼ÆËã3±¶»ù²¨ÆµÂÊ·ÖÁ¿Óë»ù²¨ÆµÂÊ·ÖÁ¿µÄ·ùÖµ±È
-    if (ratio < 0.05f) {
-        wave_type = 1; // ÕıÏÒ²¨
-		HMI_send_string("t0", "ÕıÏÒ²¨");
-    } else if (ratio < 0.20f) {
-        wave_type = 2; // Èı½Ç²¨
-		HMI_send_string("t0", "Èı½Ç²¨");
+    if(BaseIdx < 171) {
+        /* ä½é¢‘æ®µï¼ˆåŸºæ³¢ < 16.7kHzï¼‰ï¼š3æ¬¡è°æ³¢åœ¨å¥ˆå¥æ–¯ç‰¹å†…ï¼Œä½¿ç”¨ FFT è°æ³¢æ¯”å€¼æ³• */
+        float ratio = FFT_mag[3 * BaseIdx] / FFT_mag[BaseIdx];
+        if     (ratio < 0.05f) fft_type = 1; /* æ­£å¼¦æ³¢ */
+        else if(ratio < 0.20f) fft_type = 2; /* ä¸‰è§’æ³¢ */
+        else                   fft_type = 3; /* æ–¹æ³¢   */
+        wave_type = fft_type;
+
+    } else if(BaseIdx >= 205) {
+        /* é«˜é¢‘æ®µï¼ˆåŸºæ³¢ > 20kHzï¼‰ï¼šè°æ³¢è¶…å‡ºå¥ˆå¥æ–¯ç‰¹ï¼Œå®Œå…¨ä¾èµ–ç»Ÿè®¡æ³• */
+        stat_type = ClassifyWaveform();
+        wave_type = (stat_type != 0) ? stat_type : 1;
+
     } else {
-        wave_type = 3; // ·½²¨
-		HMI_send_string("t0", "·½²¨");
+        /* è¿‡æ¸¡åŒºï¼ˆ16.7kHz ~ 20kHzï¼‰ï¼šä¸¤æ³•å„å‡ºç»“è®ºï¼Œä¸ä¸€è‡´æ—¶ä¿¡ä»»ç»Ÿè®¡æ³• */
+        stat_type = ClassifyWaveform();
+        /* æ³¨æ„ï¼šæ­¤åŒºé—´ 3*BaseIdx å·²è¶… Nyquistï¼ŒFFT æ¯”å€¼ä»…ä¾›å‚è€ƒ */
+        float ratio = FFT_mag[3 * BaseIdx] / FFT_mag[BaseIdx];
+        if     (ratio < 0.05f) fft_type = 1;
+        else if(ratio < 0.20f) fft_type = 2;
+        else                   fft_type = 3;
+
+        if(stat_type == 0 || stat_type == fft_type) {
+            wave_type = fft_type;  /* ä¸€è‡´æˆ–ç»Ÿè®¡æ³•å¤±æ•ˆï¼Œä¿¡ä»» FFT */
+        } else {
+            wave_type = stat_type; /* ä¸ä¸€è‡´ï¼Œä¿¡ä»»ç»Ÿè®¡æ³• */
+        }
+    }
+
+    switch(wave_type) {
+        case 1:  HMI_send_string("t0", "sine"); break;
+        case 2:  HMI_send_string("t0", "triangle"); break;
+        case 3:  HMI_send_string("t0", "square");   break;
+        default: HMI_send_string("t0", "unknown");   break;
     }
 }
 
-/*ÊäÈë²ÎÊıÎªFFT¼ÆËãºóµÄ½á¹û£¬Êä³ö½ÃÕıºóµÄÆµÂÊºÍ·ù¶È
+/*è¾“å…¥å‚æ•°ä¸ºFFTè®¡ç®—åçš„ç»“æœï¼Œè¾“å‡ºçŸ«æ­£åçš„é¢‘ç‡å’Œå¹…åº¦
 
-FFT_mag_max_index				FFT½á¹ûÖĞ·åÖµµÄÎ»ÖÃ
-fs				²ÉÑùÆµÂÊ
-FFT_Ampl	    ½ÃÕıºóµÄ·ùÖµ
-Freq[0]			½ÃÕıºóµÄÆµÂÊ
-correctNum		½ÃÕıµÄµãÊı£¬Ò»°ãÈ¡2¼´¿É£¬È·±£·åÖµ×óÓÒµÄcorrectNumÄÚÃ»ÓĞÆäËûĞÅºÅ
-FFT_mag		FFT½á¹ûµÄ·ùÖµÊı×é	
+FFT_mag_max_index				FFTç»“æœä¸­å³°å€¼çš„ä½ç½®
+fs				é‡‡æ ·é¢‘ç‡
+FFT_Ampl	    çŸ«æ­£åçš„å¹…å€¼
+Freq[0]			çŸ«æ­£åçš„é¢‘ç‡
+correctNum		çŸ«æ­£çš„ç‚¹æ•°ï¼Œä¸€èˆ¬å–2å³å¯ï¼Œç¡®ä¿å³°å€¼å·¦å³çš„correctNumå†…æ²¡æœ‰å…¶ä»–ä¿¡å·
+FFT_mag		FFTç»“æœçš„å¹…å€¼æ•°ç»„	
 */
 
 void ADC_FFT_Get_Wave_Mes(uint32_t FFT_mag_max_index,float fs,float *FFT_Ampl,float *Freq,int correctNum)
 {
-    int i;
-    float k=2.667;                                     
+    int i;                                 
     float DatePower1=0,DatePower2=0,f;
     for(i=-correctNum;i<=correctNum;i++)     
       {
@@ -207,7 +273,7 @@ void ADC_FFT_Get_Wave_Mes(uint32_t FFT_mag_max_index,float fs,float *FFT_Ampl,fl
       }
     f=DatePower1/DatePower2;
     Freq[0] = f*fs/FFT_LEN;
-    *FFT_Ampl = 2.0f*sqrtf(k*DatePower2);
-	HMI_send_float("x0",*FFT_Ampl/65536.0f*3.3f);
+    *FFT_Ampl = sqrtf(DatePower2) * 3.3f / 65536.0f;  // k=1, å»æ‰2å€, ç›´æ¥å‡ºç”µå‹
+    HMI_send_float("x0", *FFT_Ampl);
 	HMI_send_float("x1",Freq[0]);
 }
