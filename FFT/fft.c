@@ -2,41 +2,42 @@
 #include "HMI.h"
 
 extern uint16_t ADC_Buffer[1024];
-extern TIM_HandleTypeDef htim3;  /* ç”¨äºåŠ¨æ€åˆ‡æ¢é‡‡æ ·ç‡ */
+extern TIM_HandleTypeDef htim3;// å®šæ—¶å™¨å¥æŸ„
 
-/* ±äÁ¿ */
+/* å˜é‡ */
 #define FFT_LEN 1024
 #define ADC_LEN 1024
 #define TIM3_CLK_HZ  20000000UL  /* 240MHz / (PSC+1=12) = 20MHz */
 
 uint8_t ifftFlag = 0;
-int BaseIdx = 0;         // »ù²¨ÏÂ±ê
-int wave_type;           // ²¨ĞÎÀà±ğ 1ÊÇÕıÏÒ 2ÊÇÈı½Ç 3ÊÇ·½²¨
-float fs = 100000.0f;    // ²ÉÑùÂÊ
-float FFT_Freq = 0;      // FFT¼ÆËãµÃµ½ÆµÂÊ
-float FFT_Ampl = 0;      // FFT¼ÆËãµÃµ½µÄ·ùÖµ
-float DC = 0;            // Ö±Á÷Æ«ÖÃ
-float FFT_mag_max = {0}; // ·ù¶ÈÆ××î´óÖµ
+int BaseIdx = 0;         // åŸºæ³¢ä¸‹æ ‡
+int wave_type;           // æ³¢å½¢ç±»åˆ« 1æ˜¯æ­£å¼¦ 2æ˜¯æ–¹æ³¢ 3æ˜¯ä¸‰è§’æ³¢
+float fs = 100000.0f;    // é‡‡æ ·ç‡
+float FFT_Freq = 0;      // FFTè®¡ç®—å¾—åˆ°é¢‘ç‡
+float FFT_Ampl = 0;      // FFTè®¡ç®—å¾—åˆ°çš„å¹…å€¼
+float DC = 0;            // ç›´æµåç½®
+float FFT_mag_max = {0}; // å¹…åº¦è°±æœ€å¤§å€¼
 uint32_t FFT_mag_max_index = 0;
 
-/* ÊäÈëºÍÊä³ö»º³å */
+
+/* è¾“å…¥å’Œè¾“å‡ºç¼“å†² */
 
 float FFT_Output[FFT_LEN];
 float FFT_Input[FFT_LEN * 2];
-float FFT_mag[FFT_LEN]; // ·ù¶ÈÆ×
+float FFT_mag[FFT_LEN]; // å¹…åº¦è°±
 float IFFT_Output[FFT_LEN];
 
-uint8_t EnableWindow = 1;           // ÊÇ·ñ¼Ó´°
-float Window_OutputBuffer[ADC_LEN]; // ´°º¯ÊıÊä³ö»º³å
+uint8_t EnableWindow = 1;           // æ˜¯å¦å¯ç”¨çª—å‡½æ•°ï¼ˆé»˜è®¤å¯ç”¨ï¼‰
+float Window_OutputBuffer[ADC_LEN]; // çª—å‡½æ•°è¾“å‡ºç¼“å†²åŒº
 
 /* ---------------------------------------------------------------
  * è‡ªé€‚åº”é‡‡æ ·ç‡
- * æ¡£ä½ï¼š20kHz / 200kHz / 2MHz
- * å¸¦è¿Ÿæ»ï¼ˆÂ±20%ï¼‰é˜²æ­¢è¾¹ç•Œé¢‘ç‡åå¤è·³æ¡£
+ * é‡‡æ ·ç‡ï¼š20kHz / 200kHz / 2MHz
+ * å¸¦å®½ï¼ˆÂ±20%ï¼‰é˜²æ­¢è¾¹ç•Œé¢‘ç‡æ··å 
  * --------------------------------------------------------------- */
 static float select_fs(float freq)
 {
-    static float cur = 100000.0f;  /* ä¸ MX_TIM3_Init ARR=199 å¯¹åº” */
+    static float cur = 100000.0f;  /* Ã¤Â¸Â MX_TIM3_Init ARR=199 ÄºÅ»Å¡ÄºÅŸÂ” */
     if      (cur ==   20000.0f && freq >   1200.0f) cur =  200000.0f;
     else if (cur ==  200000.0f && freq <    800.0f) cur =   20000.0f;
     else if (cur ==  200000.0f && freq >  12000.0f) cur = 2000000.0f;
@@ -44,8 +45,8 @@ static float select_fs(float freq)
     return cur;
 }
 
-/* ç›´æ¥ä¿®æ”¹ TIM3->ARRï¼Œä¸åœå®šæ—¶å™¨ï¼Œä¸‹ä¸€å¸§ DMA å³ç”Ÿæ•ˆ
- * æ³¨æ„ï¼š2MHz æ¡£ï¼ˆARR=9ï¼‰è¦æ±‚ ADC æ€»è½¬æ¢æ—¶é—´ < 500nsï¼Œè¯·ç¡®è®¤ ADC å†…æ ¸æ—¶é’Ÿ */
+/* ç›´æ¥ä¿®æ”¹ TIM3->ARRï¼Œä¸åœæ­¢å®šæ—¶å™¨ï¼Œä¸‹ä¸€å¸§ DMA å³ç”Ÿæ•ˆ
+ * æ³¨æ„ï¼š2MHz æ¡£ï¼ˆARR=9ï¼‰è¦æ±‚ ADC æ€»è½¬æ¢æ—¶é—´ < 500nsï¼Œè«‹ç¢ºèª ADC å…§æ ¸æ™‚é˜ */
 static void apply_fs(float new_fs)
 {
     uint32_t arr = (uint32_t)((float)TIM3_CLK_HZ / new_fs + 0.5f) - 1;
@@ -75,23 +76,23 @@ void FFT_Process(void)
     arm_rfft_fast_f32(&S, FFT_Input, FFT_Output, ifftFlag);
     */
 
-    // ÇåÁã»º³åÇø
+    // æ¸…é›¶ç¼“å†²åŒº
     memset(FFT_Input, 0, sizeof(FFT_Input));
     memset(FFT_mag, 0, sizeof(FFT_mag));
     memset(FFT_Output, 0, sizeof(FFT_Output));
 
-    // ¼ÆËãADCÊı¾İµÄÆ½¾ùÖµ£¨DCÆ«ÖÃ£©
+    // è®¡ç®—ADCæ•°æ®çš„å¹³å‡å€¼ï¼ˆDCåç½®ï¼‰
     uint32_t adc_sum = 0;
     for (int i = 0; i < 1024; i++)
     {
         adc_sum += ADC_Buffer[i];
     }
     DC = adc_sum / 1024.0f;
-    HMI_send_float("x_dc", DC * 3.3f / 65536.0f); // ×ªÎªµçÑ¹Öµ£¨V£©
-                                                  // ÊÇ·ñ¼Ó´°
+    HMI_send_float("x_dc", DC * 3.3f / 65536.0f); // Ã—ÅÃÅÄ¾Ã§ÅƒÅ¡Ã–Ä¾ÅÂ¨VÅÅ 
+                                                  // Ä˜Ã‡Ë‡Å„ÅºÃ“Â´Â°
     window();
 
-    // Ïû³ıDCÆ«ÖÃºóÔÙ×ª¸¡µãºÍ¼Ó´°
+    // æ¶ˆé™¤DCåç½®åå†è½¬æµ®ç‚¹å’ŒåŠ çª—
     for (int i = 0; i < 1024; i++)
     {
         FFT_Input[i * 2] = ((float)ADC_Buffer[i] - DC) * Window_OutputBuffer[i];
@@ -100,13 +101,12 @@ void FFT_Process(void)
 
     arm_cfft_f32(&arm_cfft_sR_f32_len1024, FFT_Input, 0, 1);
 
-    // showdata(FFT_Input,FFT_LEN);
+    showdata(FFT_Input, FFT_LEN);
 
-    // ¼ÆËã·ù¶ÈÆ×
+    // è®¡ç®—å¹…åº¦è°±
     arm_cmplx_mag_f32(FFT_Input, FFT_mag, FFT_LEN);
 
-    // Hanning´°¹¦ÂÊ²¹³¥+¹éÒ»»¯
-    float window_power_correction = 2.0f;
+    // Hanningçª—åŠŸç‡è¡¥å¿+å½’ä¸€åŒ–
     for (uint16_t i = 0; i < FFT_LEN; i++)
     {
         if (i == 0)
@@ -125,8 +125,6 @@ void FFT_Process(void)
 
     Find_BaseIndex();
     wave_type_detect();
-
-    /* æ ¹æ®æœ¬å¸§é¢‘ç‡ä¸ºä¸‹ä¸€å¸§é€‰æ‹©æœ€ä½³é‡‡æ ·ç‡ï¼ˆ> 50Hz æ‰ä¿¡ä»»æµ‹é‡ç»“æœï¼‰ */
     if (FFT_Freq > 50.0f)
     {
         float new_fs = select_fs(FFT_Freq);
@@ -136,17 +134,17 @@ void FFT_Process(void)
 }
 
 /*fft caculate */
-// ´ÓÆµÆ×ÖĞÌáÈ¡ĞÅºÅ£¬ÕÒµ½Ö÷Æµ£¬¼ÆËãĞÅºÅÆµÂÊºÍ·ù¶È¡£
+// ä»é¢‘è°±ä¸­æå–ä¿¡å·ï¼Œæ‰¾åˆ°ä¸»é¢‘ï¼Œè®¡ç®—ä¿¡å·é¢‘ç‡å’Œå¹…åº¦ã€‚
 void Process_FFT_mag(float *FFT_mag, float *FFT_mag_max, uint32_t *FFT_mag_max_index)
 {
 
-    // ÕÒ·ù¶ÈÆ×Ç°Ò»°ëÊı¾İ£¬ÕÒµ½×î´óÖµºÍË÷Òı
+    // æ‰¾å¹…åº¦è°±å‰ä¸€åŠæ•°æ®ï¼Œæ‰¾åˆ°æœ€å¤§å€¼å’Œç´¢å¼•
     arm_max_f32(FFT_mag, FFT_LEN / 2, FFT_mag_max, FFT_mag_max_index);
 
-    // ÇóÆµÂÊ£º×î´óÖµ½á¹û*²ÉÑùÂÊ/FFT³¤¶È
+    // æ±‚é¢‘ç‡ï¼šæœ€å¤§å€¼ç»“æœ*é‡‡æ ·ç‡/FFTé•¿åº¦
     FFT_Freq = (float)(*FFT_mag_max_index) * fs / (float)FFT_LEN;
 
-    // Çó·ùÖµ£º×î´óÖµ½á¹ûË÷Òı*2/FFT³¤¶È Ç°ÃæÒÑ¾­½øĞĞ¹ı¹éÒ»´¦ÀíÁË£¬ËùÒÔÕâÀï²»ĞèÒªÔÙ³ıÒÔFFT_LENÁË/*2
+    // æ±‚å¹…å€¼ï¼šæœ€å¤§å€¼ç»“æœç´¢å¼•*2/FFTé•¿åº¦ å‰é¢å·²ç»è¿›è¡Œè¿‡å½’ä¸€å¤„ç†äº†ï¼Œæ‰€ä»¥è¿™é‡Œä¸éœ€è¦å†é™¤ä»¥FFT_LENäº†/*2
     FFT_Ampl = *FFT_mag_max;
 }
 
@@ -161,55 +159,60 @@ void IFFT_Process(void)
     */
     arm_cfft_f32(&arm_cfft_sR_f32_len1024, FFT_Input, 1, 1);
 
-    // ÌáÈ¡Êµ²¿×÷Îª IFFT Êä³ö
+    // æå–å®éƒ¨ä½œä¸º IFFT è¾“å‡º
     for (int i = 0; i < FFT_LEN; i++)
     {
-        IFFT_Output[i] = FFT_Input[2 * i]; // È¡Êµ²¿
+        IFFT_Output[i] = FFT_Input[2 * i]; // å–å®éƒ¨
     }
 }
 
-/*Hanning´°*/
+/*Hanningçª—*/
 void window(void)
 {
-    for (int i = 0; i < ADC_LEN; i++)
+    if (EnableWindow)
     {
-        if (EnableWindow)
+        for (int i = 0; i < ADC_LEN; i++)
         {
             float tempCos = cosf(2.0f * PI * i / (ADC_LEN - 1));
             Window_OutputBuffer[i] = 0.5f * (1.0f - tempCos); // Hanning
         }
-        else
+        window_power_correction = 1.5f;
+    }
+    else
+    {
+        for (int i = 0; i < ADC_LEN; i++)
         {
-            Window_OutputBuffer[i] = 1.0f; // ²»¼Ó´°
+            Window_OutputBuffer[i] = 1.0f; // ä¸åŠ çª—
         }
+        window_power_correction = 1.0f;
     }
 }
 
-/* ÕÒµ½»ù²¨µÄÏÂ±ê*/
+/* æ‰¾åˆ°åŸºæ³¢çš„ä¸‹æ ‡*/
 void Find_BaseIndex(void)
 {
     BaseIdx = 0;
     float max_val = 0;
     for (int i = 2; i < FFT_LEN / 2; i++)
-    { // ±éÀú 0 ~ Fs/2 ²¿·Ö
+    { // éå† 0 ~ Fs/2 éƒ¨åˆ†
         if (FFT_mag[i] > max_val)
         {
             max_val = FFT_mag[i];
-            BaseIdx = i; // ¼ÇÂ¼»ù²¨µÄË÷Òı
+            BaseIdx = i; // è®°å½•åŸºæ³¢çš„ç´¢å¼•
         }
     }
 }
 
-/* Ê±ÓòÍ³¼Æ·ÖÀà
- * ·µ»ØÖµ£º1=ÕıÏÒ²¨  2=Èı½Ç²¨  3=·½²¨  0=Î´Öª£¨ĞÅºÅ¹ıÈõ£©
+/* æ—¶åŸŸç»Ÿè®¡åˆ†ç±» åº”ç”¨äºfå¤§äºç­‰ä¸20kHzçš„æƒ…å†µï¼ŒFFTè°æ³¢æ³•å¤±æ•ˆæ—¶çš„è¡¥å……åˆ¤æ–­
+ * è¿”å›å€¼ï¼š1=æ­£å¼¦æ³¢  2=ä¸‰è§’æ³¢  3=æ–¹æ³¢  0=æœªçŸ¥ï¼ˆä¿¡å·è¿‡å¼±ï¼‰
  */
 static int ClassifyWaveform(void)
 {
-    float sum_abs = 0.0f, sum_sq = 0.0f;
-    uint32_t peak_count = 0;
+    float sum_abs = 0.0f, sum_sq = 0.0f; // ç”¨äºè®¡ç®—å¹³å‡ç»å¯¹å€¼å’Œå‡æ–¹æ ¹
+    uint32_t peak_count = 0;             // ç»Ÿè®¡å³°å€¼ç‚¹æ•°é‡
     uint16_t max_v = 0, min_v = 65535;
 
-    /* Ò»´Î±éÀúÇó¼«Öµ */
+    /* ä¸€æ¬¡éå†æ±‚æå€¼ */
     for (uint32_t i = 0; i < ADC_LEN; i++)
     {
         if (ADC_Buffer[i] > max_v)
@@ -220,12 +223,12 @@ static int ClassifyWaveform(void)
 
     float vpp = (float)(max_v - min_v);
     if (vpp < 655.0f)
-        return 0; /* ĞÅºÅ¹ıÈõ£¨< ~0.033V£©£¬·µ»Ø UNKNOWN */
+        return 0; /* ä¿¡å·è¿‡å¼±ï¼ˆ< ~0.033Vï¼‰ï¼Œè¿”å› UNKNOWN */
 
     float offset = (float)min_v + vpp * 0.5f;
-    float threshold = vpp * 0.10f; /* ·åÖµÇø¼ä£ºvpp ÉÏÏÂ 10% */
+    float threshold = vpp * 0.10f; /* å³°å€¼åŒºé—´ï¼švpp ä¸Šä¸‹ 10% */
 
-    /* ¶ş´Î±éÀúÍ³¼Æ Kf Óë Rpeak */
+    /* äºŒæ¬¡éå†ç»Ÿè®¡ Kf ä¸ Rpeak */
     for (uint32_t i = 0; i < ADC_LEN; i++)
     {
         float val = (float)ADC_Buffer[i] - offset;
@@ -243,59 +246,59 @@ static int ClassifyWaveform(void)
     if (v_avg < 1e-6f)
         return 0;
 
-    float k_f = v_rms / v_avg;                         /* ²¨ĞÎÒò×Ó */
-    float r_peak = (float)peak_count / (float)ADC_LEN; /* ·åÖµÕ¼±È */
+    float k_f = v_rms / v_avg;                         /* æ³¢å½¢å› å­ */
+    float r_peak = (float)peak_count / (float)ADC_LEN; /* å³°å€¼å æ¯” */
 
     if (r_peak > 0.80f && k_f < 1.05f)
-        return 3; /* ·½²¨£º¾ø´ó¶àÊıµãÔÚÁ½¶Ë£¬Kf¡Ö1 */
+        return 3; /* æ–¹æ³¢ï¼šç»å¤§å¤šæ•°ç‚¹åœ¨ä¸¤ç«¯ï¼ŒKfâ‰ˆ1 */
     if (r_peak < 0.25f && k_f > 1.13f)
-        return 2; /* Èı½Ç²¨£º·åÖµÍ£Áô¼«¶Ì£¬Kf´ó */
-    return 1;     /* ÕıÏÒ²¨£¨Ä¬ÈÏ£© */
+        return 2; /* ä¸‰è§’æ³¢ï¼šå³°å€¼åœç•™æçŸ­ï¼ŒKfå¤§ */
+    return 1;     /* æ­£å¼¦æ³¢ï¼ˆé»˜è®¤ï¼‰ */
 }
 
-/*²¨ĞÎÅĞ¶Ï£¨FFTĞ³²¨·¨ + Ê±ÓòÍ³¼Æ·¨ÁªºÏÅĞ¾ö£©*/
+/*æ³¢å½¢åˆ¤æ–­ï¼ˆFFTè°æ³¢æ³• + æ—¶åŸŸç»Ÿè®¡æ³•è”åˆåˆ¤å†³ï¼‰*/
 void wave_type_detect(void)
 {
-    int stat_type = 0, fft_type = 0;
+    int stat_type = 0;
 
     if (BaseIdx < 171)
     {
-        /* µÍÆµ¶Î£¨»ù²¨ < 16.7kHz£©£º3´ÎĞ³²¨ÔÚÄÎ¿üË¹ÌØÄÚ£¬Ê¹ÓÃ FFT Ğ³²¨±ÈÖµ·¨ */
+        /* ä½é¢‘æ®µï¼ˆåŸºæ³¢ < 16.7kHzï¼‰ï¼š3æ¬¡è°æ³¢åœ¨å¥ˆå¥æ–¯ç‰¹å†…ï¼Œä½¿ç”¨ FFT è°æ³¢æ¯”å€¼æ³• */
         float ratio = FFT_mag[3 * BaseIdx] / FFT_mag[BaseIdx];
         if (ratio < 0.05f)
-            fft_type = 1; /* ÕıÏÒ²¨ */
+            wave_type = 1; /* æ­£å¼¦æ³¢ */
         else if (ratio < 0.20f)
-            fft_type = 2; /* Èı½Ç²¨ */
+            wave_type = 2; /* ä¸‰è§’æ³¢ */
         else
-            fft_type = 3; /* ·½²¨   */
-        wave_type = fft_type;
+            wave_type = 3; /* æ–¹æ³¢   */
+        wave_type = wave_type;
     }
     else if (BaseIdx >= 205)
     {
-        /* ¸ßÆµ¶Î£¨»ù²¨ > 20kHz£©£ºĞ³²¨³¬³öÄÎ¿üË¹ÌØ£¬ÍêÈ«ÒÀÀµÍ³¼Æ·¨ */
+        /* é«˜é¢‘æ®µï¼ˆåŸºæ³¢ > 20kHzï¼‰ï¼šè°æ³¢è¶…å‡ºå¥ˆå¥æ–¯ç‰¹ï¼Œå®Œå…¨ä¾èµ–ç»Ÿè®¡æ³• */
         stat_type = ClassifyWaveform();
         wave_type = (stat_type != 0) ? stat_type : 1;
     }
     else
     {
-        /* ¹ı¶ÉÇø£¨16.7kHz ~ 20kHz£©£ºÁ½·¨¸÷³ö½áÂÛ£¬²»Ò»ÖÂÊ±ĞÅÈÎÍ³¼Æ·¨ */
+        /* è¿‡æ¸¡åŒºï¼ˆ16.7kHz ~ 20kHzï¼‰ï¼šä¸¤æ³•å„å‡ºç»“è®ºï¼Œä¸ä¸€è‡´æ—¶ä¿¡ä»»ç»Ÿè®¡æ³• */
         stat_type = ClassifyWaveform();
-        /* ×¢Òâ£º´ËÇø¼ä 3*BaseIdx ÒÑ³¬ Nyquist£¬FFT ±ÈÖµ½ö¹©²Î¿¼ */
+        /* æ³¨æ„ï¼šæ­¤åŒºé—´ 3*BaseIdx å·²è¶… Nyquistï¼ŒFFT æ¯”å€¼ä»…ä¾›å‚è€ƒ */
         float ratio = FFT_mag[3 * BaseIdx] / FFT_mag[BaseIdx];
         if (ratio < 0.05f)
-            fft_type = 1;
+            wave_type = 1;
         else if (ratio < 0.20f)
-            fft_type = 2;
+            wave_type = 2;
         else
-            fft_type = 3;
+            wave_type = 3;
 
-        if (stat_type == 0 || stat_type == fft_type)
+        if (stat_type == 0 || stat_type == wave_type)
         {
-            wave_type = fft_type; /* Ò»ÖÂ»òÍ³¼Æ·¨Ê§Ğ§£¬ĞÅÈÎ FFT */
+            wave_type = wave_type; /* ä¸€è‡´æˆ–ç»Ÿè®¡æ³•å¤±æ•ˆï¼Œä¿¡ä»» FFT */
         }
         else
         {
-            wave_type = stat_type; /* ²»Ò»ÖÂ£¬ĞÅÈÎÍ³¼Æ·¨ */
+            wave_type = stat_type; /* ä¸ä¸€è‡´ï¼Œä¿¡ä»»ç»Ÿè®¡æ³• */
         }
     }
 
@@ -316,20 +319,20 @@ void wave_type_detect(void)
     }
 }
 
-/*ÊäÈë²ÎÊıÎªFFT¼ÆËãºóµÄ½á¹û£¬Êä³ö½ÃÕıºóµÄÆµÂÊºÍ·ù¶È
+/*è¾“å…¥å‚æ•°ä¸ºFFTè®¡ç®—åçš„ç»“æœï¼Œè¾“å‡ºçŸ«æ­£åçš„é¢‘ç‡å’Œå¹…åº¦
 
-FFT_mag_max_index				FFT½á¹ûÖĞ·åÖµµÄÎ»ÖÃ
-fs				²ÉÑùÆµÂÊ
-FFT_Ampl	    ½ÃÕıºóµÄ·ùÖµ
-Freq[0]			½ÃÕıºóµÄÆµÂÊ
-correctNum		½ÃÕıµÄµãÊı£¬Ò»°ãÈ¡2¼´¿É£¬È·±£·åÖµ×óÓÒµÄcorrectNumÄÚÃ»ÓĞÆäËûĞÅºÅ
-FFT_mag		FFT½á¹ûµÄ·ùÖµÊı×é
+FFT_mag_max_index				FFTç»“æœä¸­å³°å€¼çš„ä½ç½®
+fs				é‡‡æ ·é¢‘ç‡
+FFT_Ampl	    çŸ«æ­£åçš„å¹…å€¼
+Freq[0]			çŸ«æ­£åçš„é¢‘ç‡
+correctNum		çŸ«æ­£çš„ç‚¹æ•°ï¼Œä¸€èˆ¬å–2å³å¯ï¼Œç¡®ä¿å³°å€¼å·¦å³çš„correctNumå†…æ²¡æœ‰å…¶ä»–ä¿¡å·
+FFT_mag		FFTç»“æœçš„å¹…å€¼æ•°ç»„
 */
 
 void ADC_FFT_Get_Wave_Mes(uint32_t FFT_mag_max_index, float fs, float *FFT_Ampl, float *Freq, int correctNum)
 {
     int i;
-    float DatePower1 = 0, DatePower2 = 0, f;
+    float DatePower1 = 0, DatePower2 = 0, f; // datapower1æ˜¯åŠ æƒèƒ½é‡å’Œï¼Œdatapower2æ˜¯èƒ½é‡å’Œï¼Œfâ€œåŠ æƒé¢‘ç‡ç´¢å¼•â€
     for (i = -correctNum; i <= correctNum; i++)
     {
         DatePower1 += (FFT_mag_max_index + i) * FFT_mag[FFT_mag_max_index + i] * FFT_mag[FFT_mag_max_index + i];
@@ -337,7 +340,7 @@ void ADC_FFT_Get_Wave_Mes(uint32_t FFT_mag_max_index, float fs, float *FFT_Ampl,
     }
     f = DatePower1 / DatePower2;
     Freq[0] = f * fs / FFT_LEN;
-    *FFT_Ampl = FFT_mag[FFT_mag_max_index] * 3.3f / 65536.0f;
-    HMI_send_float("x0", *FFT_Ampl);
-    HMI_send_float("x1", Freq[0]);
+    *FFT_Ampl = sqrtf(DatePower2); // å¯¹é‚»åŸŸå†…çš„èƒ½é‡ï¼ˆå¹…å€¼çš„å¹³æ–¹å’Œï¼‰å¼€æ ¹å·ï¼Œæ¢å¤æœ‰æ•ˆå€¼ (RMS) k=1, å»æ‰2å€, ç›´æ¥å‡ºç”µå‹
+    // HMI_send_float("x0", *FFT_Ampl);
+    // HMI_send_float("x1", Freq[0]);
 }
