@@ -2,14 +2,16 @@
 #include "HMI.h"
 
 extern uint16_t ADC_Buffer[1024];
+extern TIM_HandleTypeDef htim3;
 
 /* 变量 */
 #define FFT_LEN 1024
 #define ADC_LEN 1024
+#define TIM3_CLK_HZ  20000000UL  /* 240MHz / (PSC+1=12) = 20MHz */
 
 uint8_t ifftFlag = 0;
 int BaseIdx = 0;         // 基波下标
-int wave_type;           // 波形类别 1是正弦 2是方波 3是三角波
+int wave_type;           // 波形类别 1是正弦 2是三角 3是方波
 float fs = 100000.0f;    // 采样率
 float FFT_Freq = 0;      // FFT计算得到频率
 float FFT_Ampl = 0;      // FFT计算得到的幅值
@@ -18,7 +20,6 @@ float FFT_mag_max = {0}; // 幅度谱最大值
 uint32_t FFT_mag_max_index = 0;
 
 
-/* 输入和输出缓冲 */
 
 float FFT_Output[FFT_LEN];
 float FFT_Input[FFT_LEN * 2];
@@ -27,7 +28,23 @@ float IFFT_Output[FFT_LEN];
 
 uint8_t EnableWindow = 1;           // 是否加窗
 float Window_OutputBuffer[ADC_LEN]; // 窗函数输出缓冲
-float window_power_correction;// 窗函数功率补偿系数
+
+static float select_fs(float freq)
+{
+    static float cur = 100000.0f;
+    if      (cur ==   20000.0f && freq >   1200.0f) cur =  200000.0f;
+    else if (cur ==  200000.0f && freq <    800.0f) cur =   20000.0f;
+    else if (cur ==  200000.0f && freq >  12000.0f) cur = 2000000.0f;
+    else if (cur == 2000000.0f && freq <   8000.0f) cur =  200000.0f;
+    return cur;
+}
+
+static void apply_fs(float new_fs)
+{
+    uint32_t arr = (uint32_t)((float)TIM3_CLK_HZ / new_fs + 0.5f) - 1;
+    __HAL_TIM_SET_AUTORELOAD(&htim3, arr);
+    fs = new_fs;
+}
 
 void showdata(float *buffer, uint16_t n)
 {
@@ -63,8 +80,8 @@ void FFT_Process(void)
         adc_sum += ADC_Buffer[i];
     }
     DC = adc_sum / 1024.0f;
-
-    // 是否加窗
+    HMI_send_float("x_dc", DC * 3.3f / 65536.0f); // 转为电压值（V）
+                                                  // 是否加窗
     window();
 
     // 消除DC偏置后再转浮点和加窗
@@ -76,12 +93,13 @@ void FFT_Process(void)
 
     arm_cfft_f32(&arm_cfft_sR_f32_len1024, FFT_Input, 0, 1);
 
-    showdata(FFT_Input, FFT_LEN);
+    // showdata(FFT_Input,FFT_LEN);
 
     // 计算幅度谱
     arm_cmplx_mag_f32(FFT_Input, FFT_mag, FFT_LEN);
 
     // Hanning窗功率补偿+归一化
+    float window_power_correction = 2.0f;
     for (uint16_t i = 0; i < FFT_LEN; i++)
     {
         if (i == 0)
@@ -100,6 +118,12 @@ void FFT_Process(void)
 
     Find_BaseIndex();
     wave_type_detect();
+    if (FFT_Freq > 50.0f)
+    {
+        float new_fs = select_fs(FFT_Freq);
+        if (new_fs != fs)
+            apply_fs(new_fs);
+    }
 }
 
 /*fft caculate */
@@ -167,18 +191,15 @@ void Find_BaseIndex(void)
         if (FFT_mag[i] > max_val)
         {
             max_val = FFT_mag[i];
-            BaseIdx = i; // 记录基波的索引
+            BaseIdx = i; 
         }
     }
 }
 
-/* 时域统计分类 应用于f大于等与20kHz的情况，FFT谐波法失效时的补充判断
- * 返回值：1=正弦波  2=三角波  3=方波  0=未知（信号过弱）
- */
 static int ClassifyWaveform(void)
 {
-    float sum_abs = 0.0f, sum_sq = 0.0f; // 用于计算平均绝对值和均方根
-    uint32_t peak_count = 0;             // 统计峰值点数量
+    float sum_abs = 0.0f, sum_sq = 0.0f;
+    uint32_t peak_count = 0;
     uint16_t max_v = 0, min_v = 65535;
 
     /* 一次遍历求极值 */
@@ -225,7 +246,6 @@ static int ClassifyWaveform(void)
     return 1;     /* 正弦波（默认） */
 }
 
-/*波形判断（FFT谐波法 + 时域统计法联合判决）*/
 void wave_type_detect(void)
 {
     int stat_type = 0;
@@ -235,12 +255,12 @@ void wave_type_detect(void)
         /* 低频段（基波 < 16.7kHz）：3次谐波在奈奎斯特内，使用 FFT 谐波比值法 */
         float ratio = FFT_mag[3 * BaseIdx] / FFT_mag[BaseIdx];
         if (ratio < 0.05f)
-            wave_type = 1; /* 正弦波 */
+            fft_type = 1; /* 正弦波 */
         else if (ratio < 0.20f)
-            wave_type = 2; /* 三角波 */
+            fft_type = 2; /* 三角波 */
         else
-            wave_type = 3; /* 方波   */
-        wave_type = wave_type;
+            fft_type = 3; /* 方波   */
+        wave_type = fft_type;
     }
     else if (BaseIdx >= 205)
     {
@@ -252,18 +272,18 @@ void wave_type_detect(void)
     {
         /* 过渡区（16.7kHz ~ 20kHz）：两法各出结论，不一致时信任统计法 */
         stat_type = ClassifyWaveform();
-        /* 注意：此区间 3*BaseIdx 已超 Nyquist，FFT 比值仅供参考 */
+        /* 娉ㄦ剰锛氭鍖洪棿 3*BaseIdx 宸茶秴 Nyquist锛孎FT 姣斿�间粎渚涘弬鑰� */
         float ratio = FFT_mag[3 * BaseIdx] / FFT_mag[BaseIdx];
         if (ratio < 0.05f)
-            wave_type = 1;
+            fft_type = 1;
         else if (ratio < 0.20f)
-            wave_type = 2;
+            fft_type = 2;
         else
-            wave_type = 3;
+            fft_type = 3;
 
-        if (stat_type == 0 || stat_type == wave_type)
+        if (stat_type == 0 || stat_type == fft_type)
         {
-            wave_type = wave_type; /* 一致或统计法失效，信任 FFT */
+            wave_type = fft_type; /* 一致或统计法失效，信任 FFT */
         }
         else
         {
@@ -288,7 +308,7 @@ void wave_type_detect(void)
     }
 }
 
-/*输入参数为FFT计算后的结果，输出矫正后的频率和幅度
+/*杈撳叆鍙傛暟涓篎FT璁＄畻鍚庣殑缁撴灉锛岃緭鍑虹煫姝ｅ悗鐨勯鐜囧拰骞呭害
 
 FFT_mag_max_index				FFT结果中峰值的位置
 fs				采样频率
@@ -301,7 +321,7 @@ FFT_mag		FFT结果的幅值数组
 void ADC_FFT_Get_Wave_Mes(uint32_t FFT_mag_max_index, float fs, float *FFT_Ampl, float *Freq, int correctNum)
 {
     int i;
-    float DatePower1 = 0, DatePower2 = 0, f; // datapower1是加权能量和，datapower2是能量和，f“加权频率索引”
+    float DatePower1 = 0, DatePower2 = 0, f;
     for (i = -correctNum; i <= correctNum; i++)
     {
         DatePower1 += (FFT_mag_max_index + i) * FFT_mag[FFT_mag_max_index + i] * FFT_mag[FFT_mag_max_index + i];
@@ -309,7 +329,7 @@ void ADC_FFT_Get_Wave_Mes(uint32_t FFT_mag_max_index, float fs, float *FFT_Ampl,
     }
     f = DatePower1 / DatePower2;
     Freq[0] = f * fs / FFT_LEN;
-    *FFT_Ampl = sqrtf(DatePower2); // 对邻域内的能量（幅值的平方和）开根号，恢复有效值 (RMS) k=1, 去掉2倍, 直接出电压
-    // HMI_send_float("x0", *FFT_Ampl);
-    // HMI_send_float("x1", Freq[0]);
+    *FFT_Ampl = FFT_mag[FFT_mag_max_index] * 3.3f / 65536.0f;
+    HMI_send_float("x0", *FFT_Ampl);
+    HMI_send_float("x1", Freq[0]);
 }
