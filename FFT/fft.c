@@ -166,22 +166,89 @@ void Find_BaseIndex(void)
     }
 }
 
-/*波形判断*/
+/* 时域统计分类
+ * 返回值：1=正弦波  2=三角波  3=方波  0=未知（信号过弱）
+ */
+static int ClassifyWaveform(void)
+{
+    float    sum_abs = 0.0f, sum_sq = 0.0f;
+    uint32_t peak_count = 0;
+    uint16_t max_v = 0, min_v = 65535;
+
+    /* 一次遍历求极值 */
+    for(uint32_t i = 0; i < ADC_LEN; i++) {
+        if(ADC_Buffer[i] > max_v) max_v = ADC_Buffer[i];
+        if(ADC_Buffer[i] < min_v) min_v = ADC_Buffer[i];
+    }
+
+    float vpp = (float)(max_v - min_v);
+    if(vpp < 655.0f) return 0; /* 信号过弱（< ~0.033V），返回 UNKNOWN */
+
+    float offset    = (float)min_v + vpp * 0.5f;
+    float threshold = vpp * 0.10f; /* 峰值区间：vpp 上下 10% */
+
+    /* 二次遍历统计 Kf 与 Rpeak */
+    for(uint32_t i = 0; i < ADC_LEN; i++) {
+        float val = (float)ADC_Buffer[i] - offset;
+        sum_abs += fabsf(val);
+        sum_sq  += val * val;
+        if((float)ADC_Buffer[i] >= (float)max_v - threshold ||
+           (float)ADC_Buffer[i] <= (float)min_v + threshold) {
+            peak_count++;
+        }
+    }
+
+    float v_rms  = sqrtf(sum_sq / (float)ADC_LEN);
+    float v_avg  = sum_abs / (float)ADC_LEN;
+    if(v_avg < 1e-6f) return 0;
+
+    float k_f    = v_rms / v_avg;                       /* 波形因子 */
+    float r_peak = (float)peak_count / (float)ADC_LEN;  /* 峰值占比 */
+
+    if(r_peak > 0.80f && k_f < 1.05f) return 3; /* 方波：绝大多数点在两端，Kf≈1 */
+    if(r_peak < 0.25f && k_f > 1.13f) return 2; /* 三角波：峰值停留极短，Kf大 */
+    return 1;                                    /* 正弦波（默认） */
+}
+
+/*波形判断（FFT谐波法 + 时域统计法联合判决）*/
 void wave_type_detect(void)
 {
-    // 越界保护：若3次谐波下标超出前半段频谱，无法判断，默认正弦波
-    // if (3 * BaseIdx >= FFT_LEN / 2) { wave_type = 1; return; }
+    int stat_type = 0, fft_type = 0;
 
-    float ratio = FFT_mag[3*BaseIdx] / FFT_mag[BaseIdx]; // 计算3倍基波频率分量与基波频率分量的幅值比
-    if (ratio < 0.05f) {
-        wave_type = 1; // 正弦波
-		HMI_send_string("t0", "正弦波");
-    } else if (ratio < 0.20f) {
-        wave_type = 2; // 三角波
-		HMI_send_string("t0", "三角波");
+    if(BaseIdx < 171) {
+        /* 低频段（基波 < 16.7kHz）：3次谐波在奈奎斯特内，使用 FFT 谐波比值法 */
+        float ratio = FFT_mag[3 * BaseIdx] / FFT_mag[BaseIdx];
+        if     (ratio < 0.05f) fft_type = 1; /* 正弦波 */
+        else if(ratio < 0.20f) fft_type = 2; /* 三角波 */
+        else                   fft_type = 3; /* 方波   */
+        wave_type = fft_type;
+
+    } else if(BaseIdx >= 205) {
+        /* 高频段（基波 > 20kHz）：谐波超出奈奎斯特，完全依赖统计法 */
+        stat_type = ClassifyWaveform();
+        wave_type = (stat_type != 0) ? stat_type : 1;
+
     } else {
-        wave_type = 3; // 方波
-		HMI_send_string("t0", "方波");
+        /* 过渡区（16.7kHz ~ 20kHz）：两法各出结论，不一致时信任统计法 */
+        stat_type = ClassifyWaveform();
+        /* 注意：此区间 3*BaseIdx 已超 Nyquist，FFT 比值仅供参考 */
+        float ratio = FFT_mag[3 * BaseIdx] / FFT_mag[BaseIdx];
+        if     (ratio < 0.05f) fft_type = 1;
+        else if(ratio < 0.20f) fft_type = 2;
+        else                   fft_type = 3;
+
+        if(stat_type == 0 || stat_type == fft_type) {
+            wave_type = fft_type;  /* 一致或统计法失效，信任 FFT */
+        } else {
+            wave_type = stat_type; /* 不一致，信任统计法 */
+        }
+    }
+
+    switch(wave_type) {
+        case 1:  HMI_send_string("t0", "sine"); break;
+        case 2:  HMI_send_string("t0", "triangle"); break;
+        case 3:  HMI_send_string("t0", "square");   break;
+        default: HMI_send_string("t0", "unknown");   break;
     }
 }
 
@@ -197,8 +264,7 @@ FFT_mag		FFT结果的幅值数组
 
 void ADC_FFT_Get_Wave_Mes(uint32_t FFT_mag_max_index,float fs,float *FFT_Ampl,float *Freq,int correctNum)
 {
-    int i;
-    float k=2.667;                                     
+    int i;                                 
     float DatePower1=0,DatePower2=0,f;
     for(i=-correctNum;i<=correctNum;i++)     
       {
@@ -207,7 +273,7 @@ void ADC_FFT_Get_Wave_Mes(uint32_t FFT_mag_max_index,float fs,float *FFT_Ampl,fl
       }
     f=DatePower1/DatePower2;
     Freq[0] = f*fs/FFT_LEN;
-    *FFT_Ampl = 2.0f*sqrtf(k*DatePower2);
-	HMI_send_float("x0",*FFT_Ampl/65536.0f*3.3f);
+    *FFT_Ampl = sqrtf(DatePower2) * 3.3f / 65536.0f;  // k=1, 去掉2倍, 直接出电压
+    HMI_send_float("x0", *FFT_Ampl);
 	HMI_send_float("x1",Freq[0]);
 }
